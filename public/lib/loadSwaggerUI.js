@@ -71,7 +71,16 @@ $(function() {
     $('#api_selector').submit(setAccessToken);
     $('#input_accessToken').keyup(onInputChange);
 
-    window.swaggerUi.load();
+    //window.swaggerUi.load();
+
+    if (window.localStorage) {
+      var key = window.localStorage.getItem(lsKey);
+      if (key) {  
+        checkKey(key, function(){
+          window.swaggerUi.load();
+        })      
+      } 
+    }    
   }
 
   function setAccessToken(e) {
@@ -81,33 +90,59 @@ $(function() {
     var keyLocation = authOptions.in || 'query';
     var keyName = authOptions.name || 'access_token';
     var key = $('#input_accessToken')[0].value;
-    log('key: ' + key);
-    if (key && key.trim() !== '') {
-      log('added accessToken ' + key);
-      var apiKeyAuth =
-        new SwaggerClient.ApiKeyAuthorization(keyName, key, keyLocation);
-      window.swaggerUi.api.clientAuthorizations.add('key', apiKeyAuth);
-      accessToken = key;
-      $('.accessTokenDisplay').text('Token Set.').addClass('set');
-      $('.accessTokenDisplay').attr('data-tooltip', 'Current Token: ' + key);
+    
+    checkKey(key, function(){
+      log('key: ' + key);
+      if (key && key.trim() !== '') {
+        log('added accessToken ' + key);
+        var apiKeyAuth =
+          new SwaggerClient.ApiKeyAuthorization(keyName, key, keyLocation);
+        if(!window.swaggerUi.api) window.swaggerUi.load();
+        window.swaggerUi.api.clientAuthorizations.add('key', apiKeyAuth);
+        accessToken = key;
+        $('.accessTokenDisplay').text('Token Set.').addClass('set');
+        $('.accessTokenDisplay').attr('data-tooltip', 'Current Token: ' + key);
 
-      // Save this token to localStorage if we can to make it persist on refresh.
-      if (window.localStorage) {
-        window.localStorage.setItem(lsKey, key);
+        // Save this token to localStorage if we can to make it persist on refresh.
+        if (window.localStorage) {
+          window.localStorage.setItem(lsKey, key);
+        }
+      } else {
+        // If submitted with an empty token, remove the current token. Can be
+        // useful to intentionally remove authorization.
+        log('removed accessToken.');
+        $('.accessTokenDisplay').text('Token Not Set.').removeClass('set');
+        $('.accessTokenDisplay').removeAttr('data-tooltip');
+        if (window.swaggerUi) {
+          window.swaggerUi.api.clientAuthorizations.remove('key');
+        }
+        if (window.localStorage) {
+          window.localStorage.removeItem(lsKey);
+        }
       }
-    } else {
-      // If submitted with an empty token, remove the current token. Can be
-      // useful to intentionally remove authorization.
-      log('removed accessToken.');
-      $('.accessTokenDisplay').text('Token Not Set.').removeClass('set');
-      $('.accessTokenDisplay').removeAttr('data-tooltip');
-      if (window.swaggerUi) {
-        window.swaggerUi.api.clientAuthorizations.remove('key');
-      }
-      if (window.localStorage) {
-        window.localStorage.removeItem(lsKey);
+    });    
+  }
+
+  function checkKey(key, callback){
+    const xhr = new XMLHttpRequest();
+
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState == 4) {
+        if (xhr.status == 200) {
+            const responseObject = JSON.parse(this.response);
+            const keyIsValid = responseObject.exists;
+            if(!keyIsValid) {
+              alert('token is unvalid');
+              return;
+            } 
+            if(callback) callback();
+        }
       }
     }
+
+    const url = `${window.location.protocol}//${window.location.host}/api/AccessTokens/${key}/exists`;
+    xhr.open('GET', url, true);
+    xhr.send();
   }
 
   function onInputChange(e) {
